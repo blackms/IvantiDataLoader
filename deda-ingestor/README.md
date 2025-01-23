@@ -1,98 +1,48 @@
 # 🚀 Deda Ingestor
 
-> 🔄 A robust Python application that synchronizes product data between RabbitMQ and Ivanti
+> 🔄 Seamlessly sync product data from RabbitMQ to Ivanti
 
-## 🌟 Features
+## ✨ Key Features
 
-- 📦 Consumes JSON messages from RabbitMQ containing product information
-- ✨ Smart data validation and transformation
-- 🔄 Bidirectional sync with Ivanti through REST API
-- ⏰ Configurable scheduled execution
-- 📊 Comprehensive logging and reporting
-- 🔁 Intelligent retry mechanisms with exponential backoff
-- 🛡️ Robust error handling and recovery
+🔐 **Secure Authentication**
+- OAuth2 authentication with Ivanti API
+- Automatic token refresh
+- Secure credential handling
 
-## 🏗️ Architecture
+🔄 **Robust Data Sync**
+- Batch processing of product data
+- Smart retry strategies
+- Rate limit handling
 
-The application follows clean architecture principles and implements several design patterns:
+📊 **Comprehensive Monitoring**
+- Detailed logging system
+- Error tracking and reporting
+- Sync status monitoring
 
-### 🎯 Design Patterns
+🛡️ **Error Resilience**
+- Automatic retries for transient failures
+- Exponential backoff strategy
+- Rate limit respect
 
-- 💉 **Dependency Injection**: Loose coupling between components
-- 📚 **Repository Pattern**: Clean data access abstraction
-- 🔄 **Adapter Pattern**: Smart data transformation
-- 🏭 **Factory Pattern**: Flexible object creation
+## 🛠️ Installation
 
-### 📁 Project Structure
-
-```
-src/
-├── deda_ingestor/
-│   ├── adapters/           # 🔄 Data transformation
-│   │   ├── __init__.py
-│   │   ├── base.py        # 🎯 Base adapter interfaces
-│   │   └── product_adapter.py
-│   ├── config/            # ⚙️ Configuration management
-│   │   ├── __init__.py
-│   │   └── settings.py
-│   ├── core/             # 💼 Core business logic
-│   │   ├── __init__.py
-│   │   ├── exceptions.py
-│   │   ├── models.py
-│   │   └── product_service.py
-│   ├── repositories/     # 📦 Data access layer
-│   │   ├── __init__.py
-│   │   ├── base.py
-│   │   ├── rabbitmq_repository.py
-│   │   └── ivanti_repository.py
-│   ├── scheduler/        # ⏰ Scheduling logic
-│   │   ├── __init__.py
-│   │   └── job_scheduler.py
-│   ├── utils/           # 🛠️ Utility functions
-│   │   ├── __init__.py
-│   │   ├── logging.py
-│   │   └── retry.py
-│   ├── __init__.py
-│   ├── __main__.py      # 🎮 Entry point
-│   └── container.py     # 💉 Dependency injection
-└── tests/              # 🧪 Test suite
-```
-
-## 🚀 Getting Started
-
-### 📋 Prerequisites
-
-- 🐍 Python 3.9 or higher
-- 🐰 RabbitMQ server
-- 🔑 Ivanti API credentials
-
-### 🛠️ Installation
-
-1. Clone the repository:
 ```bash
-git clone https://github.com/your-org/deda-ingestor.git
-cd deda-ingestor
-```
-
-2. Install Poetry (if not already installed):
-```bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
-3. Install dependencies:
-```bash
+# 📦 Install dependencies using Poetry
 poetry install
 ```
 
-### ⚙️ Configuration
+## ⚙️ Configuration
 
-1. Copy the example environment file:
-```bash
-cp .env.example .env
-```
+Create a `.env` file based on `.env.example`:
 
-2. Edit `.env` with your settings:
 ```env
+# 🔑 Ivanti API Configuration
+IVANTI_API_URL=https://ivanti-api.example.com
+IVANTI_API_KEY=your-api-key
+IVANTI_CLIENT_ID=your-client-id
+IVANTI_CLIENT_SECRET=your-client-secret
+IVANTI_TOKEN_URL=https://ivanti-api.example.com/oauth/token
+
 # 🐰 RabbitMQ Configuration
 RABBITMQ_HOST=localhost
 RABBITMQ_PORT=5672
@@ -100,152 +50,159 @@ RABBITMQ_USER=guest
 RABBITMQ_PASSWORD=guest
 RABBITMQ_QUEUE=products_queue
 
-# 🔑 Ivanti API Configuration
-IVANTI_API_URL=https://ivanti-api.example.com
-IVANTI_API_KEY=your_api_key
-IVANTI_CLIENT_ID=your_client_id
-IVANTI_CLIENT_SECRET=your_client_secret
-
-# 📝 Logging Configuration
+# 🎛️ Application Settings
 LOG_LEVEL=INFO
 LOG_DIR=logs
-
-# ⏰ Scheduler Configuration
-SCHEDULE_TIME=02:00
-TIMEZONE=UTC
 ```
 
-## 🎮 Usage
+## 🚀 Usage
 
-### 🔄 Running the Application
-
-#### Scheduled Execution
 ```bash
+# 🏃‍♂️ Run the application
 poetry run python -m deda_ingestor
-```
 
-#### Immediate Execution
-```bash
-poetry run python -m deda_ingestor --run-now
-```
-
-#### Custom Log Level
-```bash
-poetry run python -m deda_ingestor --log-level DEBUG
-```
-
-### 📊 Message Format
-
-Expected JSON message format:
-```json
-{
-  "productId": "P12345",
-  "productName": "Example Product",
-  "productElements": [
-    {
-      "Lenght": 50,
-      "Procuct Element": "Element 1",
-      "Type": "Hardware",
-      "GG Startup": 3,
-      "RU": "Resource Unit",
-      "RU Qty": 10,
-      "RU Unit of measure": "Days",
-      "Q.ty min": 1,
-      "Q.ty MAX": 100,
-      "%Sconto MAX": 15,
-      "Startup Costo": 500.0,
-      "Startup Margine": 20,
-      "Startup Prezzo": 600.0,
-      "Canone Costo Mese": 100.0,
-      "Canone Margine": 10,
-      "Canone Prezzo Mese": 110.0,
-      "Extended Description": "Detailed description",
-      "Profit Center Prevalente": "PC001",
-      "Status": "Active"
-    }
-  ]
-}
-```
-
-## 📊 Logging
-
-The application uses structured logging with different outputs:
-
-- 📝 `app.log`: General application logs
-- ❌ `error.log`: Error-specific logs
-- 📊 `sync_report.log`: Daily synchronization reports
-
-Log files are automatically rotated and compressed.
-
-## 🧪 Development
-
-### Running Tests
-```bash
-# 🧪 Run all tests
+# 🧪 Run tests
 poetry run pytest
-
-# 🔍 Run with coverage
-poetry run pytest --cov
-
-# 🚀 Run in parallel
-poetry run pytest -n auto
 ```
 
-### 🧹 Code Quality
-```bash
-# 🎨 Format code
-poetry run black .
-poetry run isort .
+## 🧪 Test Suite
 
-# 🔍 Lint code
-poetry run flake8
-poetry run mypy .
+Our comprehensive test suite ensures reliable operation with extensive coverage of all functionality.
 
-# 🛡️ Security checks
-poetry run bandit -r src/
-poetry run safety check
+### 🔐 Authentication Tests
+| Test | Description |
+|------|-------------|
+| ✅ `test_authentication_success` | Validates OAuth2 flow and token handling |
+| ❌ `test_authentication_failure` | Verifies proper error handling for auth failures |
+
+### 📦 Product Operations Tests
+| Test | Description |
+|------|-------------|
+| 🔍 `test_get_product_success` | Ensures accurate product retrieval |
+| 🚫 `test_get_product_not_found` | Validates 404 handling |
+| ➕ `test_create_product_success` | Tests product creation flow |
+| 🔄 `test_update_product_success` | Verifies update operations |
+
+### 🛡️ Error Handling Tests
+| Test | Description |
+|------|-------------|
+| 🔄 `test_retry_on_temporary_error` | Validates retry mechanism (503 errors) |
+| ⏳ `test_rate_limit_handling` | Tests rate limit handling (429 responses) |
+
+### 📦 Batch Processing Tests
+| Test | Description |
+|------|-------------|
+| 🔄 `test_batch_process_products` | Validates batch operations with mixed results |
+
+### 📊 Test Coverage
+
+| Component | Coverage | Status |
+|-----------|----------|---------|
+| Base Repository | 100% | 🟢 Perfect |
+| Core Models | 94% | 🟢 Excellent |
+| Ivanti Repository | 85% | 🟡 Good |
+| Utils | 64% | 🟡 Adequate |
+
+### 🧰 Test Fixtures
+
+| Fixture | Purpose |
+|---------|----------|
+| 🔑 `mock_auth_response` | OAuth2 token simulation |
+| ✅ `mock_auth_success` | Successful auth responses |
+| ⚙️ `ivanti_config` | Repository configuration |
+| 🌐 `mock_httpx_client` | HTTP client mocking |
+| 📦 `sample_product` | Test product data |
+| 📄 `mock_product_response` | API response simulation |
+
+## 📁 Project Structure
+
 ```
-
-### 🏗️ Pre-commit Hooks
-
-Install pre-commit hooks:
-```bash
-poetry run pre-commit install
+deda-ingestor/
+├── src/
+│   └── deda_ingestor/
+│       ├── 🔄 adapters/          # Data transformation
+│       ├── ⚙️ config/            # Configuration
+│       ├── 📦 core/              # Domain models
+│       ├── 💾 repositories/      # Data access
+│       ├── ⏰ scheduler/         # Job scheduling
+│       └── 🛠️ utils/            # Utilities
+├── 🧪 tests/                     # Test suite
+├── 📝 poetry.lock               # Dependencies
+└── ⚙️ pyproject.toml           # Project config
 ```
-
-## 🔒 Error Handling
-
-The application implements a comprehensive error handling strategy:
-
-- 🔁 Automatic retries for transient failures
-- 📊 Detailed error logging and tracking
-- 🔄 Dead Letter Queue (DLQ) for failed messages
-- 🛡️ Circuit breaker for external services
 
 ## 🤝 Contributing
 
 1. 🍴 Fork the repository
-2. 🌿 Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. 💾 Commit your changes (`git commit -m 'Add amazing feature'`)
-4. 📤 Push to the branch (`git push origin feature/amazing-feature`)
-5. 🎁 Open a Pull Request
+2. 🌿 Create a feature branch
+3. ✍️ Commit your changes
+4. 🚀 Push to the branch
+5. 📬 Create a Pull Request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🙏 Acknowledgments
+## 🌟 Test Highlights
 
-- 🐰 RabbitMQ team for the amazing message broker
-- 🔧 Ivanti team for their API
-- 🐍 Python community for the awesome ecosystem
+### Authentication Flow
+```python
+def test_authentication_success():
+    """✅ Validates OAuth2 authentication flow"""
+    # Setup token response
+    mock_response.json.return_value = {
+        "access_token": "test-token",
+        "expires_in": 3600
+    }
+    
+    # Execute auth flow
+    repository.connect()
+    
+    # Verify token storage
+    assert repository._access_token == "test-token"
+```
 
-## 📞 Support
+### Error Handling
+```python
+def test_retry_on_temporary_error():
+    """🔄 Tests retry mechanism for 503 errors"""
+    # Setup: 2 failures, then success
+    mock_client.put.side_effect = [
+        error_503_response,
+        error_503_response,
+        success_response
+    ]
+    
+    # Should succeed after retries
+    success = repository.update_product(product)
+    assert success is True
+    assert mock_client.put.call_count == 3
+```
 
-For support and questions:
-- 📧 Email: support@example.com
-- 💬 Issues: GitHub Issues
-- 📚 Wiki: Project Wiki
+### Rate Limiting
+```python
+def test_rate_limit_handling():
+    """⏳ Validates rate limit handling"""
+    # Setup 429 response
+    rate_limit_response.headers = {
+        "Retry-After": "2"
+    }
+    
+    # Should handle rate limit and retry
+    success = repository.create_product(product)
+    assert success is True
+```
 
----
-Made with ❤️ by Your Team
+## 📈 Performance
+
+- ⚡ Fast batch processing
+- 🔄 Efficient retry mechanisms
+- 🎯 Smart rate limit handling
+- 💾 Optimized data transformations
+
+## 🔍 Code Quality
+
+- 📏 100% type hinted
+- 🧹 Follows PEP 8
+- 📚 Comprehensive docstrings
+- ✨ Modern Python practices

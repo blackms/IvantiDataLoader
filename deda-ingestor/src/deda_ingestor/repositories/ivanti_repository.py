@@ -1,6 +1,6 @@
 """Repository for interacting with Ivanti API."""
 import time
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Dict, List, Optional, Union
 
 import httpx
@@ -281,7 +281,7 @@ class IvantiRepository(BaseRepository):
         """
         result = SyncResult(
             total_processed=len(products),
-            start_time=datetime.utcnow()
+            start_time=datetime.now(UTC)
         )
 
         for product in products:
@@ -306,7 +306,7 @@ class IvantiRepository(BaseRepository):
                     product_id=product.product_id
                 )
 
-        result.end_time = datetime.utcnow()
+        result.end_time = datetime.now(UTC)
         return result
 
     def close(self) -> None:

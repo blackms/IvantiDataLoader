@@ -35,7 +35,6 @@ def mock_auth_success(mock_httpx_client: Mock, mock_auth_response: dict) -> Mock
     response.status_code = 200
     response.json.return_value = mock_auth_response
     response.raise_for_status = Mock()
-    mock_httpx_client.post.return_value = response
     return response
 
 
@@ -69,6 +68,7 @@ def ivanti_repository(
     mock_auth_success: Mock
 ) -> IvantiRepository:
     """Fixture for Ivanti repository."""
+    mock_httpx_client.post.return_value = mock_auth_success
     return IvantiRepository(ivanti_config)
 
 
@@ -345,7 +345,8 @@ def test_retry_on_temporary_error(
 def test_rate_limit_handling(
     ivanti_repository: IvantiRepository,
     mock_httpx_client: Mock,
-    sample_product: Product
+    sample_product: Product,
+    mock_auth_response: dict
 ):
     """Test handling of rate limit responses."""
     # Setup rate limit response
@@ -366,9 +367,15 @@ def test_rate_limit_handling(
     success_response.json.return_value = mock_auth_response
     success_response.raise_for_status = Mock()
 
+    create_response = Mock(spec=httpx.Response)
+    create_response.status_code = 201
+    create_response.json.return_value = {"id": "PROD-123"}
+    create_response.raise_for_status = Mock()
+
     mock_httpx_client.post.side_effect = [
         rate_limit_response,
-        success_response
+        success_response,
+        create_response
     ]
 
     # Execute
@@ -376,21 +383,29 @@ def test_rate_limit_handling(
 
     # Verify
     assert success is True
-    assert mock_httpx_client.post.call_count == 2
+    assert mock_httpx_client.post.call_count == 3
 
 
 def test_batch_process_products(
     ivanti_repository: IvantiRepository,
     mock_httpx_client: Mock,
-    sample_product: Product
+    sample_product: Product,
+    mock_auth_response: dict
 ):
     """Test batch processing of products."""
-    # Setup
+    # Setup authentication response
+    auth_response = Mock(spec=httpx.Response)
+    auth_response.status_code = 200
+    auth_response.json.return_value = mock_auth_response
+    auth_response.raise_for_status = Mock()
+
+    # Setup success response
     success_response = Mock(spec=httpx.Response)
     success_response.status_code = 201
     success_response.json.return_value = {"id": "PROD-123"}
     success_response.raise_for_status = Mock()
-    
+
+    # Setup error response
     error_response = Mock(spec=httpx.Response)
     error_response.status_code = 400
     error_response.json.return_value = {"error": "Invalid data"}
@@ -402,10 +417,14 @@ def test_batch_process_products(
         )
     )
 
+    # Set up response sequence
     mock_httpx_client.post.side_effect = [
-        success_response,
-        error_response,
-        success_response
+        auth_response,    # First authentication
+        success_response, # First product
+        auth_response,    # Second authentication
+        error_response,   # Second product
+        auth_response,    # Third authentication
+        success_response  # Third product
     ]
 
     products = [sample_product] * 3

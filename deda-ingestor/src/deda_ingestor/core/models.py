@@ -3,7 +3,7 @@ from datetime import datetime, UTC
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class ProductElement(BaseModel):
@@ -30,7 +30,8 @@ class ProductElement(BaseModel):
     notes: Optional[str] = Field(alias="Note", default=None)
     object_reference: Optional[str] = Field(alias="Object", default=None)
 
-    @validator("status")
+    @field_validator("status")
+    @classmethod
     def validate_status(cls, v: str) -> str:
         """Validate status field."""
         valid_statuses = {"Active", "Inactive", "Draft"}
@@ -60,7 +61,8 @@ class ProductElement(BaseModel):
             "profit_center": self.profit_center,
             "status": self.status,
             "notes": self.notes,
-            "object_reference": self.object_reference
+            "object_reference": self.object_reference,
+            "length": self.length
         }
 
 
@@ -72,14 +74,16 @@ class Product(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: Optional[datetime] = None
 
-    @validator("product_id")
+    @field_validator("product_id")
+    @classmethod
     def validate_product_id(cls, v: str) -> str:
         """Validate product ID field."""
         if not v.strip():
             raise ValueError("Product ID cannot be empty")
         return v
 
-    @validator("product_name")
+    @field_validator("product_name")
+    @classmethod
     def validate_product_name(cls, v: str) -> str:
         """Validate product name field."""
         if not v.strip():
