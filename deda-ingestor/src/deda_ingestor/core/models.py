@@ -1,32 +1,65 @@
 """Core domain models for the Deda Ingestor application."""
 from datetime import datetime
-from typing import Dict, Optional
+from decimal import Decimal
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, validator
 
 
-class ProductAttributes(BaseModel):
-    """Product attributes model."""
-    category: Optional[str] = None
-    manufacturer: Optional[str] = None
-    release_date: Optional[datetime] = None
-    description: Optional[str] = None
-    size: Optional[str] = None
-    version: Optional[str] = None
-    license_type: Optional[str] = None
-    platform: Optional[str] = None
-    language: Optional[str] = None
-    additional_info: Dict[str, str] = Field(default_factory=dict)
+class ProductElement(BaseModel):
+    """Model for a product element."""
+    length: int = Field(..., alias="Lenght")
+    product_element: str = Field(..., alias="Procuct Element")
+    type: str = Field(..., alias="Type")
+    startup_days: int = Field(..., alias="GG Startup")
+    resource_unit: str = Field(..., alias="RU")
+    resource_unit_qty: int = Field(..., alias="RU Qty")
+    resource_unit_measure: str = Field(..., alias="RU Unit of measure")
+    quantity_min: int = Field(..., alias="Q.ty min")
+    quantity_max: int = Field(..., alias="Q.ty MAX")
+    max_discount_percentage: Decimal = Field(..., alias="%Sconto MAX")
+    startup_cost: Decimal = Field(..., alias="Startup Costo")
+    startup_margin: Decimal = Field(..., alias="Startup Margine")
+    startup_price: Decimal = Field(..., alias="Startup Prezzo")
+    monthly_fee_cost: Decimal = Field(..., alias="Canone Costo Mese")
+    monthly_fee_margin: Decimal = Field(..., alias="Canone Margine")
+    monthly_fee_price: Decimal = Field(..., alias="Canone Prezzo Mese")
+    extended_description: str = Field(..., alias="Extended Description")
+    profit_center: str = Field(..., alias="Profit Center Prevalente")
+    status: str = Field(..., alias="Status")
+    notes: Optional[str] = Field(None, alias="Note")
+    object_reference: Optional[str] = Field(None, alias="Object")
+
+    class Config:
+        """Pydantic model configuration."""
+        populate_by_name = True
+        json_encoders = {
+            Decimal: lambda v: float(v),
+        }
+
+    @validator("status")
+    def validate_status(cls, v: str) -> str:
+        """Validate status field."""
+        valid_statuses = {"Active", "Inactive", "Discontinued"}
+        if v not in valid_statuses:
+            raise ValueError(f"Status must be one of {valid_statuses}")
+        return v
 
 
 class Product(BaseModel):
     """Core product model."""
-    product_id: str = Field(..., description="Unique identifier for the product")
-    product_name: str = Field(..., description="Name of the product")
-    attributes: ProductAttributes = Field(default_factory=ProductAttributes)
+    product_id: str = Field(..., alias="productId")
+    product_name: str = Field(..., alias="productName")
+    product_elements: List[ProductElement] = Field(..., alias="productElements")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
-    is_active: bool = True
+
+    class Config:
+        """Pydantic model configuration."""
+        populate_by_name = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+        }
 
     @validator("product_id")
     def validate_product_id(cls, v: str) -> str:
@@ -43,17 +76,43 @@ class Product(BaseModel):
         return v.strip()
 
 
+class IvantiProductElement(BaseModel):
+    """Ivanti product element model for API interactions."""
+    id: str
+    name: str = Field(..., alias="product_element")
+    type: str
+    startup_days: int
+    resource_unit: str
+    resource_unit_qty: int
+    resource_unit_measure: str
+    quantity_min: int
+    quantity_max: int
+    max_discount_percentage: float
+    startup_cost: float
+    startup_margin: float
+    startup_price: float
+    monthly_fee_cost: float
+    monthly_fee_margin: float
+    monthly_fee_price: float
+    extended_description: str
+    profit_center: str
+    status: str
+    notes: Optional[str] = None
+    object_reference: Optional[str] = None
+
+    class Config:
+        """Pydantic model configuration."""
+        populate_by_name = True
+
+
 class IvantiProduct(BaseModel):
     """Ivanti product model for API interactions."""
     id: str = Field(alias="product_id")
     name: str = Field(alias="product_name")
-    category: Optional[str] = None
-    manufacturer: Optional[str] = None
-    release_date: Optional[datetime] = None
-    description: Optional[str] = None
-    version: Optional[str] = None
-    status: str = "active"
-    custom_fields: Dict[str, str] = Field(default_factory=dict)
+    elements: List[IvantiProductElement]
+    status: str = "Active"
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         """Pydantic model configuration."""
