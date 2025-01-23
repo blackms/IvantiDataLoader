@@ -1,15 +1,19 @@
 """Core service for handling product synchronization."""
-import json
-import logging
 from typing import Optional
 
-import structlog
-
 from ..adapters.product_adapter import ProductAdapter
+from ..core.exceptions import (
+    AdapterError,
+    ConnectionError,
+    MessageProcessingError,
+    RetryableError
+)
 from ..core.models import Product, SyncResult
 from ..repositories.base import MessageQueueRepository, ProductRepository
+from ..utils.logging import get_logger
+from ..utils.retry import RetryConfig, retry_with_backoff
 
-logger = structlog.get_logger(__name__)
+logger = get_logger()
 
 
 class ProductService:
@@ -19,7 +23,7 @@ class ProductService:
         self,
         message_queue: MessageQueueRepository,
         product_repository: ProductRepository,
-        max_retries: int = 3
+        retry_config: Optional[RetryConfig] = None
     ):
         """
         Initialize ProductService.
@@ -27,43 +31,46 @@ class ProductService:
         Args:
             message_queue: Repository for message queue operations
             product_repository: Repository for product operations
-            max_retries: Maximum number of retries for failed operations
+            retry_config: Retry configuration
         """
         self.message_queue = message_queue
         self.product_repository = product_repository
-        self.max_retries = max_retries
+        self.retry_config = retry_config or RetryConfig()
         self.sync_result = SyncResult()
 
+    def _validate_repositories(self) -> None:
+        """
+        Validate repository health.
+
+        Raises:
+            ConnectionError: If repositories are not healthy
+        """
+        if not self.message_queue.health_check():
+            raise ConnectionError("Message queue repository is not healthy")
+        if not self.product_repository.health_check():
+            raise ConnectionError("Product repository is not healthy")
+
+    @retry_with_backoff(
+        retryable_exceptions=RetryableError,
+        config=RetryConfig(max_attempts=3)
+    )
     def process_messages(self) -> SyncResult:
         """
         Process messages from the queue and sync with Ivanti.
 
         Returns:
             SyncResult: Results of the synchronization process
+
+        Raises:
+            ConnectionError: If connection to services fails
+            MessageProcessingError: If message processing fails
         """
         logger.info("Starting product synchronization")
+        self.sync_result = SyncResult()  # Reset sync result
 
         try:
-            # Process messages from queue
-            for message, delivery_tag in self.message_queue.consume_messages():
-                try:
-                    success = self._process_single_message(message)
-                    if success:
-                        self.message_queue.acknowledge_message(delivery_tag)
-                    else:
-                        # If processing failed, reject and don't requeue
-                        self.message_queue.reject_message(delivery_tag, requeue=False)
-                except Exception as e:
-                    logger.exception(
-                        "Error processing message",
-                        error=str(e),
-                        delivery_tag=delivery_tag
-                    )
-                    self.message_queue.reject_message(delivery_tag, requeue=False)
-                    self.sync_result.record_failure(
-                        str(delivery_tag),
-                        f"Processing error: {str(e)}"
-                    )
+            self._validate_repositories()
+            self._process_message_batch()
 
         except Exception as e:
             logger.exception("Fatal error during message processing", error=str(e))
@@ -75,22 +82,111 @@ class ProductService:
 
         return self.sync_result
 
+    def _process_message_batch(self) -> None:
+        """
+        Process a batch of messages from the queue.
+
+        Raises:
+            ConnectionError: If connection fails
+            MessageProcessingError: If processing fails
+        """
+        try:
+            for message, delivery_tag in self.message_queue.consume_messages():
+                try:
+                    success = self._process_single_message(message)
+                    if success:
+                        self._acknowledge_message(delivery_tag)
+                    else:
+                        self._reject_message(delivery_tag)
+
+                except Exception as e:
+                    logger.exception(
+                        "Error processing message",
+                        error=str(e),
+                        delivery_tag=delivery_tag
+                    )
+                    self._reject_message(delivery_tag)
+                    self._record_processing_error(str(delivery_tag), e)
+
+        except Exception as e:
+            raise MessageProcessingError(
+                f"Error during batch processing: {str(e)}"
+            ) from e
+
     def _process_single_message(self, message: dict) -> bool:
         """
         Process a single message from the queue.
 
         Args:
-            message: The message to process
+            message: Message to process
 
         Returns:
-            bool: True if processing was successful, False otherwise
+            bool: True if processing was successful
+
+        Raises:
+            AdapterError: If message conversion fails
+            MessageProcessingError: If processing fails
         """
         try:
             # Convert message to domain model
-            product = ProductAdapter.from_rabbitmq_message(message)
-            
-            # Check if product already exists
-            existing_product = self.product_repository.get_product(product.product_id)
+            product = self._convert_message_to_product(message)
+            if not product:
+                return False
+
+            # Process the product
+            return self._process_product(product)
+
+        except Exception as e:
+            if not isinstance(e, (AdapterError, MessageProcessingError)):
+                raise MessageProcessingError(
+                    f"Unexpected error processing message: {str(e)}"
+                ) from e
+            raise
+
+    def _convert_message_to_product(self, message: dict) -> Optional[Product]:
+        """
+        Convert message to Product domain model.
+
+        Args:
+            message: Message to convert
+
+        Returns:
+            Optional[Product]: Converted product or None if conversion fails
+
+        Raises:
+            AdapterError: If conversion fails
+        """
+        try:
+            return ProductAdapter.from_rabbitmq_message(message)
+        except Exception as e:
+            logger.error(
+                "Failed to convert message to product",
+                error=str(e),
+                message=message
+            )
+            raise AdapterError(
+                f"Failed to convert message to product: {str(e)}",
+                details={"message": message}
+            ) from e
+
+    def _process_product(self, product: Product) -> bool:
+        """
+        Process a product by creating or updating in Ivanti.
+
+        Args:
+            product: Product to process
+
+        Returns:
+            bool: True if processing was successful
+
+        Raises:
+            MessageProcessingError: If processing fails
+        """
+        try:
+            # Check if product exists
+            existing_product = self.product_repository.get_product(
+                product.product_id
+            )
             
             if existing_product:
                 success = self._update_product(product)
@@ -99,39 +195,21 @@ class ProductService:
             
             return success
 
-        except ValueError as e:
-            logger.error(
-                "Invalid message format",
-                error=str(e),
-                message=json.dumps(message)
-            )
-            self.sync_result.record_failure(
-                message.get("productId", "unknown"),
-                f"Invalid message format: {str(e)}"
-            )
-            return False
-
         except Exception as e:
-            logger.exception(
-                "Error processing product",
-                error=str(e),
-                product_id=message.get("productId", "unknown")
-            )
-            self.sync_result.record_failure(
-                message.get("productId", "unknown"),
-                f"Processing error: {str(e)}"
-            )
-            return False
+            raise MessageProcessingError(
+                f"Failed to process product {product.product_id}: {str(e)}",
+                product_id=product.product_id
+            ) from e
 
     def _create_product(self, product: Product) -> bool:
         """
         Create a new product in Ivanti.
 
         Args:
-            product: The product to create
+            product: Product to create
 
         Returns:
-            bool: True if creation was successful, False otherwise
+            bool: True if creation was successful
         """
         try:
             if self.product_repository.create_product(product):
@@ -146,7 +224,7 @@ class ProductService:
                     "Failed to create product",
                     product_id=product.product_id
                 )
-                self.sync_result.record_failure(
+                self._record_processing_error(
                     product.product_id,
                     "Failed to create product"
                 )
@@ -158,7 +236,7 @@ class ProductService:
                 error=str(e),
                 product_id=product.product_id
             )
-            self.sync_result.record_failure(
+            self._record_processing_error(
                 product.product_id,
                 f"Creation error: {str(e)}"
             )
@@ -169,10 +247,10 @@ class ProductService:
         Update an existing product in Ivanti.
 
         Args:
-            product: The product to update
+            product: Product to update
 
         Returns:
-            bool: True if update was successful, False otherwise
+            bool: True if update was successful
         """
         try:
             if self.product_repository.update_product(product):
@@ -187,7 +265,7 @@ class ProductService:
                     "Failed to update product",
                     product_id=product.product_id
                 )
-                self.sync_result.record_failure(
+                self._record_processing_error(
                     product.product_id,
                     "Failed to update product"
                 )
@@ -199,11 +277,60 @@ class ProductService:
                 error=str(e),
                 product_id=product.product_id
             )
-            self.sync_result.record_failure(
+            self._record_processing_error(
                 product.product_id,
                 f"Update error: {str(e)}"
             )
             return False
+
+    def _acknowledge_message(self, delivery_tag: int) -> None:
+        """
+        Acknowledge message processing.
+
+        Args:
+            delivery_tag: Message delivery tag
+        """
+        try:
+            self.message_queue.acknowledge_message(delivery_tag)
+        except Exception as e:
+            logger.error(
+                "Failed to acknowledge message",
+                error=str(e),
+                delivery_tag=delivery_tag
+            )
+
+    def _reject_message(self, delivery_tag: int) -> None:
+        """
+        Reject message processing.
+
+        Args:
+            delivery_tag: Message delivery tag
+        """
+        try:
+            self.message_queue.reject_message(delivery_tag, requeue=False)
+        except Exception as e:
+            logger.error(
+                "Failed to reject message",
+                error=str(e),
+                delivery_tag=delivery_tag
+            )
+
+    def _record_processing_error(
+        self,
+        identifier: str,
+        error: Exception | str
+    ) -> None:
+        """
+        Record a processing error in the sync result.
+
+        Args:
+            identifier: Error identifier (product ID or delivery tag)
+            error: Error details
+        """
+        self.sync_result.record_failure(
+            identifier,
+            str(error) if isinstance(error, Exception) else error
+        )
 
     def _log_sync_results(self) -> None:
         """Log the synchronization results."""
@@ -219,6 +346,6 @@ class ProductService:
 
         if self.sync_result.errors:
             logger.error(
-                "Synchronization errors",
+                "Synchronization errors occurred",
                 errors=self.sync_result.errors
             )

@@ -13,19 +13,31 @@ httpx = "^0.26.0"         # Modern HTTP client
 pydantic = "^2.5.3"       # Data validation
 python-dotenv = "^1.0.0"  # Environment variables management
 apscheduler = "^3.10.4"   # Job scheduling
-tenacity = "^8.2.3"       # Retry mechanism
-structlog = "^24.1.0"     # Structured logging
 dependency-injector = "^4.41.0"  # Dependency injection container
+loguru = "^0.7.2"         # Better logging
+tenacity = "^8.2.3"       # Retry mechanism
+backoff = "^2.2.1"        # Exponential backoff
+aiohttp = "^3.9.1"        # Async HTTP client
+orjson = "^3.9.10"        # Fast JSON parsing
+types-python-dateutil = "^2.8.19.14"  # Type hints for dateutil
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.4"
 pytest-cov = "^4.1.0"
 pytest-asyncio = "^0.23.3"
+pytest-mock = "^3.12.0"
 black = "^24.1.1"
 isort = "^5.13.2"
 flake8 = "^7.0.0"
 mypy = "^1.8.0"
-pytest-mock = "^3.12.0"
+pylint = "^3.0.3"
+bandit = "^1.7.6"        # Security checks
+safety = "^2.3.5"        # Dependency security checks
+pre-commit = "^3.6.0"    # Git hooks
+pytest-xdist = "^3.5.0"  # Parallel testing
+pytest-sugar = "^0.9.7"  # Better test output
+pytest-randomly = "^3.15.0"  # Random test order
+pytest-timeout = "^2.2.0"  # Test timeouts
 
 [build-system]
 requires = ["poetry-core"]
@@ -50,9 +62,56 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 check_untyped_defs = true
+show_error_codes = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-v --cov=deda_ingestor --cov-report=term-missing"
+addopts = """
+    -v
+    --cov=deda_ingestor
+    --cov-report=term-missing
+    --cov-report=html
+    --cov-branch
+    --randomly-seed=1234
+    --timeout=300
+    """
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+branch = true
+source = ["deda_ingestor"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError",
+]
+
+[tool.pylint.messages_control]
+disable = [
+    "C0111",  # missing-docstring
+    "R0903",  # too-few-public-methods
+]
+
+[tool.pylint.format]
+max-line-length = 88
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]  # skip assert warnings
+
+[tool.poetry.scripts]
+deda-ingestor = "deda_ingestor.__main__:main"

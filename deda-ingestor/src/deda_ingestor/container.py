@@ -12,15 +12,27 @@ from .config.settings import (
 from .core.product_service import ProductService
 from .repositories.rabbitmq_repository import RabbitMQRepository
 from .repositories.ivanti_repository import IvantiRepository
+from .utils.logging import init_logging
+from .utils.retry import RetryConfig
 
 
 class Container(containers.DeclarativeContainer):
     """Dependency injection container."""
 
-    # Configuration
+    # Configuration providers
     config = providers.Singleton(AppConfig)
 
-    # Logging configuration provider
+    # Retry configuration
+    retry_config = providers.Singleton(
+        RetryConfig,
+        max_attempts=3,
+        base_delay=1.0,
+        max_delay=60.0,
+        exponential_base=2.0,
+        jitter=True
+    )
+
+    # Logging configuration and initialization
     log_config = providers.Singleton(
         LogConfig,
         level=config.provided.log.level,
@@ -28,6 +40,11 @@ class Container(containers.DeclarativeContainer):
         app_log_file=config.provided.log.app_log_file,
         error_log_file=config.provided.log.error_log_file,
         sync_report_file=config.provided.log.sync_report_file,
+    )
+
+    logging = providers.Resource(
+        init_logging,
+        config=log_config
     )
 
     # RabbitMQ configuration and repository
@@ -45,6 +62,7 @@ class Container(containers.DeclarativeContainer):
     rabbitmq_repository = providers.Singleton(
         RabbitMQRepository,
         config=rabbitmq_config,
+        retry_config=retry_config
     )
 
     # Ivanti configuration and repository
@@ -63,6 +81,7 @@ class Container(containers.DeclarativeContainer):
     ivanti_repository = providers.Singleton(
         IvantiRepository,
         config=ivanti_config,
+        retry_config=retry_config
     )
 
     # Scheduler configuration
@@ -77,16 +96,35 @@ class Container(containers.DeclarativeContainer):
         ProductService,
         message_queue=rabbitmq_repository,
         product_repository=ivanti_repository,
-        max_retries=config.provided.ivanti.max_retries,
+        retry_config=retry_config
     )
+
+    # Lifecycle hooks
+    def init_resources(self) -> None:
+        """Initialize container resources."""
+        # Initialize logging first
+        self.logging()
+
+    def shutdown_resources(self) -> None:
+        """Shutdown container resources."""
+        # Cleanup code here if needed
+        pass
 
 
 # Create and configure container instance
 container = Container()
 
-# Wire the container (this enables dependency injection in FastAPI routes if we add them later)
+# Initialize resources
+container.init_resources()
+
+# Wire the container for dependency injection
 container.wire(modules=[
     "deda_ingestor.core.product_service",
     "deda_ingestor.repositories.rabbitmq_repository",
     "deda_ingestor.repositories.ivanti_repository",
+    "deda_ingestor.scheduler.job_scheduler",
 ])
+
+# Register shutdown hook
+import atexit
+atexit.register(container.shutdown_resources)
