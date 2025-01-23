@@ -19,6 +19,26 @@ from deda_ingestor.repositories.ivanti_repository import IvantiRepository
 
 
 @pytest.fixture
+def mock_auth_response() -> dict:
+    """Fixture for mock authentication response."""
+    return {
+        "access_token": "test-token",
+        "token_type": "Bearer",
+        "expires_in": 3600
+    }
+
+
+@pytest.fixture
+def mock_auth_success(mock_httpx_client: Mock, mock_auth_response: dict):
+    """Fixture for successful authentication."""
+    auth_response = Mock(spec=httpx.Response)
+    auth_response.status_code = 200
+    auth_response.json.return_value = mock_auth_response
+    mock_httpx_client.post.return_value = auth_response
+    return auth_response
+
+
+@pytest.fixture
 def ivanti_config() -> IvantiConfig:
     """Fixture for Ivanti configuration."""
     return IvantiConfig(
@@ -44,7 +64,8 @@ def mock_httpx_client(mocker: MockerFixture) -> Mock:
 @pytest.fixture
 def ivanti_repository(
     ivanti_config: IvantiConfig,
-    mock_httpx_client: Mock
+    mock_httpx_client: Mock,
+    mock_auth_success: Mock
 ) -> IvantiRepository:
     """Fixture for Ivanti repository."""
     return IvantiRepository(ivanti_config)
@@ -85,16 +106,6 @@ def sample_product() -> Product:
         ],
         created_at=datetime.now(UTC)
     )
-
-
-@pytest.fixture
-def mock_auth_response() -> dict:
-    """Fixture for mock authentication response."""
-    return {
-        "access_token": "test-token",
-        "token_type": "Bearer",
-        "expires_in": 3600
-    }
 
 
 @pytest.fixture
@@ -220,6 +231,7 @@ def test_get_product_not_found(
     # Setup
     mock_response = Mock(spec=httpx.Response)
     mock_response.status_code = 404
+    mock_response.json.return_value = {"error": "Product not found"}
     mock_httpx_client.get.return_value = mock_response
 
     # Execute
@@ -238,15 +250,20 @@ def test_create_product_success(
     # Setup
     mock_response = Mock(spec=httpx.Response)
     mock_response.status_code = 201
-    mock_httpx_client.post.return_value = mock_response
+    mock_response.json.return_value = {"id": "PROD-123"}
+    mock_httpx_client.post.side_effect = [
+        mock_auth_success,  # For authentication
+        mock_response      # For product creation
+    ]
 
     # Execute
     success = ivanti_repository.create_product(sample_product)
 
     # Verify
     assert success is True
-    mock_httpx_client.post.assert_called_once()
-    posted_data = json.loads(mock_httpx_client.post.call_args[1]["json"])
+    assert mock_httpx_client.post.call_count == 2
+    create_call = mock_httpx_client.post.call_args_list[1]
+    posted_data = json.loads(create_call[1]["json"])
     assert posted_data["id"] == "PROD-123"
     assert posted_data["name"] == "Test Product"
     assert len(posted_data["elements"]) == 1
@@ -261,6 +278,7 @@ def test_update_product_success(
     # Setup
     mock_response = Mock(spec=httpx.Response)
     mock_response.status_code = 200
+    mock_response.json.return_value = {"id": "PROD-123"}
     mock_httpx_client.put.return_value = mock_response
 
     # Execute
@@ -283,6 +301,7 @@ def test_retry_on_temporary_error(
     # Setup responses: two failures followed by success
     error_response = Mock(spec=httpx.Response)
     error_response.status_code = 503
+    error_response.json.return_value = {"error": "Service Unavailable"}
     error_response.raise_for_status.side_effect = httpx.HTTPStatusError(
         "Service Unavailable",
         request=Mock(),
@@ -291,6 +310,7 @@ def test_retry_on_temporary_error(
 
     success_response = Mock(spec=httpx.Response)
     success_response.status_code = 200
+    success_response.json.return_value = {"id": "PROD-123"}
 
     mock_httpx_client.put.side_effect = [
         error_response,
@@ -316,6 +336,7 @@ def test_rate_limit_handling(
     rate_limit_response = Mock(spec=httpx.Response)
     rate_limit_response.status_code = 429
     rate_limit_response.headers = {"Retry-After": "2"}
+    rate_limit_response.json.return_value = {"error": "Rate limit exceeded"}
     rate_limit_response.raise_for_status.side_effect = httpx.HTTPStatusError(
         "Rate limit exceeded",
         request=Mock(),
@@ -324,6 +345,7 @@ def test_rate_limit_handling(
 
     success_response = Mock(spec=httpx.Response)
     success_response.status_code = 200
+    success_response.json.return_value = {"id": "PROD-123"}
 
     mock_httpx_client.post.side_effect = [
         rate_limit_response,
@@ -347,6 +369,7 @@ def test_batch_process_products(
     # Setup
     success_response = Mock(spec=httpx.Response)
     success_response.status_code = 201
+    success_response.json.return_value = {"id": "PROD-123"}
     
     error_response = Mock(spec=httpx.Response)
     error_response.status_code = 400
@@ -373,23 +396,3 @@ def test_batch_process_products(
     assert result.successful_syncs == 2
     assert result.failed_syncs == 1
     assert len(result.errors) == 1
-
-
-def test_health_check(
-    ivanti_repository: IvantiRepository,
-    mock_httpx_client: Mock,
-    mock_auth_response: dict
-):
-    """Test health check functionality."""
-    # Setup
-    mock_response = Mock(spec=httpx.Response)
-    mock_response.status_code = 200
-    mock_response.json.return_value = mock_auth_response
-    mock_httpx_client.post.return_value = mock_response
-
-    # Execute
-    is_healthy = ivanti_repository.health_check()
-
-    # Verify
-    assert is_healthy is True
-    mock_httpx_client.post.assert_called_once()

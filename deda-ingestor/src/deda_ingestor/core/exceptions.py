@@ -99,7 +99,9 @@ class RetryableError(DedaIngestorError):
         message: str,
         retry_count: int = 0,
         max_retries: int = 3,
-        details: Optional[Any] = None
+        details: Optional[Any] = None,
+        status_code: Optional[int] = None,
+        response_body: Optional[str] = None
     ):
         """
         Initialize the exception.
@@ -109,9 +111,13 @@ class RetryableError(DedaIngestorError):
             retry_count: Current retry attempt number
             max_retries: Maximum number of retries allowed
             details: Additional error details
+            status_code: HTTP status code (for API errors)
+            response_body: Response body (for API errors)
         """
         self.retry_count = retry_count
         self.max_retries = max_retries
+        self.status_code = status_code
+        self.response_body = response_body
         super().__init__(message, details)
 
     @property

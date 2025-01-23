@@ -4,10 +4,9 @@ import random
 import time
 from typing import Any, Callable, Optional, Type, Union, Tuple
 
-from ..core.exceptions import RetryableError
-from ..utils.logging import get_logger
+from loguru import logger
 
-logger = get_logger()
+from ..core.exceptions import RetryableError
 
 
 class RetryConfig:
