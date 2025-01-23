@@ -1,5 +1,5 @@
 """Configuration settings for the Deda Ingestor application."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -8,6 +8,7 @@ import os
 
 # Load environment variables from .env file
 load_dotenv()
+
 
 @dataclass
 class RabbitMQConfig:
@@ -19,6 +20,7 @@ class RabbitMQConfig:
     queue: str = os.getenv("RABBITMQ_QUEUE", "products_queue")
     connection_retry_count: int = int(os.getenv("RABBITMQ_RETRY_COUNT", "3"))
     connection_retry_delay: int = int(os.getenv("RABBITMQ_RETRY_DELAY", "5"))
+
 
 @dataclass
 class IvantiConfig:
@@ -32,14 +34,18 @@ class IvantiConfig:
     max_retries: int = int(os.getenv("IVANTI_MAX_RETRIES", "3"))
     retry_delay: int = int(os.getenv("IVANTI_RETRY_DELAY", "5"))
 
+
 @dataclass
 class LogConfig:
     """Logging configuration."""
     level: str = os.getenv("LOG_LEVEL", "INFO")
-    directory: Path = Path(os.getenv("LOG_DIR", "logs"))
+    directory: Path = field(
+        default_factory=lambda: Path(os.getenv("LOG_DIR", "logs"))
+    )
     app_log_file: str = "app.log"
     error_log_file: str = "error.log"
     sync_report_file: str = "sync_report.log"
+
 
 @dataclass
 class SchedulerConfig:
@@ -47,19 +53,21 @@ class SchedulerConfig:
     schedule_time: str = os.getenv("SCHEDULE_TIME", "02:00")
     timezone: str = os.getenv("TIMEZONE", "UTC")
 
+
 @dataclass
 class AppConfig:
     """Main application configuration."""
-    rabbitmq: RabbitMQConfig = RabbitMQConfig()
-    ivanti: IvantiConfig = IvantiConfig()
-    log: LogConfig = LogConfig()
-    scheduler: SchedulerConfig = SchedulerConfig()
+    rabbitmq: RabbitMQConfig = field(default_factory=RabbitMQConfig)
+    ivanti: IvantiConfig = field(default_factory=IvantiConfig)
+    log: LogConfig = field(default_factory=LogConfig)
+    scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
     environment: str = os.getenv("ENVIRONMENT", "development")
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
 
     def __post_init__(self):
         """Validate configuration and create necessary directories."""
-        self._validate_config()
+        if self.environment != "test":
+            self._validate_config()
         self._create_directories()
 
     def _validate_config(self) -> None:
@@ -73,7 +81,13 @@ class AppConfig:
 
     def _create_directories(self) -> None:
         """Create necessary directories if they don't exist."""
-        self.log.directory.mkdir(parents=True, exist_ok=True)
+        if self.environment != "test":
+            self.log.directory.mkdir(parents=True, exist_ok=True)
+
+
+# Set test environment for pytest
+if "PYTEST_CURRENT_TEST" in os.environ:
+    os.environ["ENVIRONMENT"] = "test"
 
 # Create global config instance
 config = AppConfig()
