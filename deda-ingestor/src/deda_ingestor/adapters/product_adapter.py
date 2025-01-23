@@ -1,7 +1,7 @@
 """Adapter for transforming product data between different formats."""
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 from uuid import uuid4
 
 from loguru import logger
@@ -41,6 +41,23 @@ class ProductAdapter(BaseAdapter[Dict[str, Any], Product]):
         "Profit Center Prevalente",
         "Status"
     ]
+
+    @classmethod
+    def from_rabbitmq_message(cls, message: Dict[str, Any]) -> Product:
+        """
+        Convert a RabbitMQ message to a Product domain model.
+
+        Args:
+            message: Raw data from RabbitMQ
+
+        Returns:
+            Product: Domain model instance
+
+        Raises:
+            AdapterError: If conversion fails
+        """
+        adapter = cls()
+        return adapter.adapt(message)
 
     def validate_input(self, data: Dict[str, Any]) -> None:
         """
@@ -194,8 +211,8 @@ class ProductAdapter(BaseAdapter[Dict[str, Any], Product]):
                 ) from e
             raise
 
-    @classmethod
-    def to_ivanti_product(cls, product: Product) -> IvantiProduct:
+    @staticmethod
+    def to_ivanti_product(product: Product) -> IvantiProduct:
         """
         Convert a Product domain model to an IvantiProduct for API operations.
 
@@ -213,7 +230,7 @@ class ProductAdapter(BaseAdapter[Dict[str, Any], Product]):
             
             for element in product.product_elements:
                 try:
-                    ivanti_element = cls._to_ivanti_element(element)
+                    ivanti_element = ProductAdapter._to_ivanti_element(element)
                     ivanti_elements.append(ivanti_element)
                 except Exception as e:
                     raise AdapterError(

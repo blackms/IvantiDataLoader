@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 
 from deda_ingestor.adapters.product_adapter import ProductAdapter
+from deda_ingestor.core.exceptions import AdapterError
 from deda_ingestor.core.models import Product, ProductElement, IvantiProduct
 
 
@@ -219,8 +220,12 @@ def test_from_rabbitmq_message_missing_required_fields():
     }
 
     # When/Then
-    with pytest.raises(ValueError):
+    with pytest.raises(AdapterError) as exc_info:
         ProductAdapter.from_rabbitmq_message(invalid_message)
+    
+    assert "Missing required fields" in str(exc_info.value)
+    assert "productId" in str(exc_info.value)
+    assert "productName" in str(exc_info.value)
 
 
 def test_from_rabbitmq_message_invalid_element_data():
@@ -247,5 +252,7 @@ def test_from_rabbitmq_message_invalid_element_data():
     }
 
     # When/Then
-    with pytest.raises(ValueError):
+    with pytest.raises(AdapterError) as exc_info:
         ProductAdapter.from_rabbitmq_message(message_with_invalid_element)
+    
+    assert "Invalid product element" in str(exc_info.value)
