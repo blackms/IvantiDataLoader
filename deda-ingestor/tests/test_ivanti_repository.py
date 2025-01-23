@@ -34,7 +34,7 @@ def mock_auth_success(mock_httpx_client: Mock, mock_auth_response: dict) -> Mock
     response = Mock(spec=httpx.Response)
     response.status_code = 200
     response.json.return_value = mock_auth_response
-    response.raise_for_status = Mock()  # Add this line
+    response.raise_for_status = Mock()
     mock_httpx_client.post.return_value = response
     return response
 
@@ -137,7 +137,8 @@ def mock_product_response() -> dict:
                 "profit_center": "PC001",
                 "status": "Active",
                 "notes": "Test Note",
-                "object_reference": "REF001"
+                "object_reference": "REF001",
+                "length": 50
             }
         ],
         "status": "Active",
@@ -362,7 +363,7 @@ def test_rate_limit_handling(
 
     success_response = Mock(spec=httpx.Response)
     success_response.status_code = 200
-    success_response.json.return_value = {"id": "PROD-123"}
+    success_response.json.return_value = mock_auth_response
     success_response.raise_for_status = Mock()
 
     mock_httpx_client.post.side_effect = [

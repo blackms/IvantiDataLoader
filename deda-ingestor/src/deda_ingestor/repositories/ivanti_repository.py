@@ -29,13 +29,13 @@ class IvantiRepository(BaseRepository):
             config: Ivanti configuration
         """
         self.config = config
+        self._access_token = None
+        self._token_expiry = 0
         self._client = httpx.Client(
             base_url=config.api_url,
             timeout=config.request_timeout,
             headers=self._get_default_headers()
         )
-        self._access_token = None
-        self._token_expiry = 0
 
     def _get_default_headers(self) -> Dict[str, str]:
         """Get default headers for API requests."""
