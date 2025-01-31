@@ -1,0 +1,55 @@
+# Example configuration for loading product data from Excel to Ivanti
+source:
+  type: "excel"
+  name: "Product Catalog"
+  file_path: "data/product_catalog.xlsx"
+  sheet_name: "Products"
+  header_row: 0
+  skip_rows: 0
+  required_columns:
+    - "Product ID"
+    - "Product Name"
+    - "Description"
+    - "Category"
+    - "Price"
+    - "Status"
+
+# Field mappings define how source fields map to Ivanti fields
+mappings:
+  - source_field: "Product ID"
+    target_field: "id"
+    transform: "strip"
+
+  - source_field: "Product Name"
+    target_field: "name"
+    transform: "strip"
+
+  - source_field: "Description"
+    target_field: "extended_description"
+    transform: "strip"
+
+  - source_field: "Category"
+    target_field: "type"
+    transform: "strip|upper"
+
+  - source_field: "Price"
+    target_field: "monthly_fee_price"
+    transform: "float"
+    default_value: 0.0
+
+  - source_field: "Status"
+    target_field: "status"
+    transform: "strip|upper"
+    default_value: "DRAFT"
+
+# Ivanti API configuration
+target:
+  auth:
+    url: "https://ivanti.example.com/api/v1"
+    username: "${IVANTI_USERNAME}"  # Set via environment variable
+    password: "${IVANTI_PASSWORD}"  # Set via environment variable
+    tenant: "default"
+  entity_type: "product"
+  batch_size: 50
+  timeout: 30
+  retry_attempts: 3
